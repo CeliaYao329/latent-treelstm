@@ -161,9 +161,9 @@ def validate(valid_data, model, epoch, device, logger, summary_writer):
     start = time.time()
     with torch.no_grad():
         for labels, tokens, mask in valid_data:
-            labels = labels.to(device=device, non_blocking=True)
-            tokens = tokens.to(device=device, non_blocking=True)
-            mask = mask.to(device=device, non_blocking=True)
+            # labels = labels.to(device=device, non_blocking=True)
+            # tokens = tokens.to(device=device, non_blocking=True)
+            # mask = mask.to(device=device, non_blocking=True)
             loading_time_meter.update(time.time() - start)
 
             pred_labels, ce_loss, rewards, actions, actions_log_prob, entropy, normalized_entropy = \
@@ -204,11 +204,16 @@ def train(train_data, valid_data, model, optimizer, lr_scheduler, es, epoch, arg
     model.train()
     start = time.time()
     for batch_idx, (labels, tokens, mask) in enumerate(train_data):
-        labels = labels.to(device=device, non_blocking=True)
-        tokens = tokens.to(device=device, non_blocking=True)
-        mask = mask.to(device=device, non_blocking=True)
+        # labels = labels.to(device=device, non_blocking=True)
+        # tokens = tokens.to(device=device, non_blocking=True)
+        # mask = mask.to(device=device, non_blocking=True)
+        # Here mask are all 1
+        # labels: [B]
+        # tokens: [B, L]
+        # mask: [B, L] all 1 ? why in the same batch all have the same length..
         loading_time_meter.update(time.time() - start)
-
+        print("token size:", tokens.size())
+        # model: ReinforceModel
         pred_labels, ce_loss, rewards, actions, actions_log_prob, entropy, normalized_entropy = \
             model(tokens, mask, labels)
         entropy = entropy.mean()
@@ -266,12 +271,13 @@ def main(args):
                            tree_leaf_transformation=args.tree_leaf_transformation,
                            tree_trans_hidden_dim=args.tree_trans_hidden_dim,
                            baseline_type=args.baseline_type,
-                           var_normalization=args.var_normalization).cuda(args.gpu_id)
+                           # var_normalization=args.var_normalization).cuda(args.gpu_id)
+                           var_normalization=args.var_normalization)
     optimizer, lr_scheduler, es = prepare_optimisers(args, logger,
                                                      policy_parameters=model.get_policy_parameters(),
                                                      environment_parameters=model.get_environment_parameters())
 
-    validate(valid_data, model, 0, args.gpu_id, logger, summary_writer)
+    # validate(valid_data, model, 0, args.gpu_id, logger, summary_writer)
     for epoch in range(args.max_epoch):
         train(train_data, valid_data, model, optimizer, lr_scheduler, es, epoch, args, logger, summary_writer)
         if es.is_converged:
@@ -298,11 +304,12 @@ if __name__ == "__main__":
             "pol-lr":                     1.0,
             "lr-scheduler-patience":      8,
             "l2-weight":                  0.0001,
-            "batch-size":                 64,
+            "batch-size":                 4,
             "max-epoch":                  300,
             "es-patience":                20,
             "es-threshold":               0.005,
-            "gpu-id":                     0,
+            # Test
+            "gpu-id":                     -1,
             "model-dir":                  "data/listops/reinforce/models/exp0",
             "logs-path":                  "data/listops/reinforce/logs/exp0",
             "tensorboard-path":           "data/listops/reinforce/tensorboard/exp0"

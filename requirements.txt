@@ -6,3 +6,4 @@ tensorboardX>=1.6
 nltk>=3.4
 torchtext>=0.3.1
 h5py>=2.9.0
+flask>=1.1.1

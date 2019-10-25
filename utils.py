@@ -75,6 +75,8 @@ def length_to_mask(length):
 
 class Categorical:
     def __init__(self, scores, mask=None):
+        # scores [B x L-k]
+        # mask [B, L-k]
         self.mask = mask
         if mask is None:
             self.cat_distr = TorchCategorical(F.softmax(scores, dim=-1))
@@ -82,6 +84,7 @@ class Categorical:
             self.log_n = math.log(self.n)
         else:
             self.n = self.mask.sum(dim=-1)
+            # self.n [B]
             self.log_n = (self.n + 1e-17).log()
             self.cat_distr = TorchCategorical(Categorical.masked_softmax(scores, self.mask))
 
@@ -91,6 +94,7 @@ class Categorical:
 
     @lazy_property
     def logits(self):
+        # logits: [B, L-k]
         return self.cat_distr.logits
 
     @lazy_property
@@ -125,7 +129,7 @@ class Categorical:
 
         elif gumbel_noise.shape != self.probs.shape:
             raise ValueError
-
+        # TODO(siyu) what does temperature mean
         if temperature is None:
             with torch.no_grad():
                 scores = (self.logits + gumbel_noise)
@@ -137,6 +141,8 @@ class Categorical:
             scores = (self.logits + gumbel_noise) / temperature
             sample = Categorical.masked_softmax(scores, self.mask)
             return sample, gumbel_noise
+        # sample [B, L-k] with only the selected action position being one at each sample
+        # gumbel noise [B, L-k]
 
     def log_prob(self, value):
         if value.dtype == torch.long:
@@ -159,9 +165,15 @@ class Categorical:
         This is just a technical workaround that allows `Categorical` class usage.
         If probs doesn't sum to one there will be an exception during sampling.
         """
+        # scores [B , L-k]
+        # mask [B, L-k]
         probs = F.softmax(logits, dim=-1) * mask
+        # probs [B, L-k]
+        # TODO what is the purpose of this line...
         probs = probs + (mask.sum(dim=-1, keepdim=True) == 0.).to(dtype=torch.float32)
+
         Z = probs.sum(dim=-1, keepdim=True)
+        # return [B, L-k] sum to 1 for each sample
         return probs / Z
 
 

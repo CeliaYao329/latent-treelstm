@@ -26,10 +26,15 @@ class ListOpsDataset(Dataset):
     def collate_fn(data):
         labels, tokens = zip(*data)
         labels = torch.tensor(labels, dtype=torch.long)
+
         max_len = max(len(e) for e in tokens)
         mask = torch.zeros((len(tokens), max_len), dtype=torch.float32)
         for idx, e in enumerate(tokens):
             mask[idx, :len(e)] = 1
         tokens = [e + [0] * (max_len - len(e)) for e in tokens]
         tokens = torch.tensor(tokens, dtype=torch.long)
+        print("collate_fn")
+        print(tokens)
+        print(mask.sum(dim=-1, keepdim=True))
+        quit()
         return labels, tokens, mask

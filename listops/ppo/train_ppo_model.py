@@ -385,5 +385,6 @@ if __name__ == "__main__":
     global_step = 0
     best_model_path = None
     args = parser.parse_args()
-    with torch.cuda.device(args.gpu_id):
+    # Siyu cpu for understanding
+    with torch.cuda.device(-1):
         main(args)

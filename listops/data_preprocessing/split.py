@@ -23,4 +23,5 @@ with open("data/listops/interim/train.tsv", 'w') as f:
     for line in lines[1000:]:
         f.write(line)
 
+# Why not splid a subset to test
 copyfile("data/listops/external/test_d20s.tsv", "data/listops/interim/test.tsv")

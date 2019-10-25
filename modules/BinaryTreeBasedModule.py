@@ -58,10 +58,13 @@ class BinaryTreeBasedModule(nn.Module):
         raise NotImplementedError
 
     def _transform_leafs(self, x, mask):
+        # x: [B, L, word_dim]
+        # mask: [B, L]
         if self.leaf_transformation == BinaryTreeBasedModule.no_transformation:
             pass
         elif self.leaf_transformation == BinaryTreeBasedModule.lstm_transformation:
             x = self.lstm(x, mask)
+            # x: [B, L, trans_dim]
         elif self.leaf_transformation == BinaryTreeBasedModule.bi_lstm_transformation:
             h_f = self.lstm_f(x, mask)
             h_b = self.lstm_b(x, mask, backward=True)
@@ -74,6 +77,7 @@ class BinaryTreeBasedModule(nn.Module):
             x = F.tanh(x)
             x = x.permute(0, 2, 1)
         # tanh is applied to make sure that leafs and other nodes are in the same range
+        # return two [B, L, hidden_dim] tensors --> h, c
         return self.linear(x).tanh().chunk(chunks=2, dim=-1)
 
     @staticmethod
@@ -83,14 +87,17 @@ class BinaryTreeBasedModule(nn.Module):
         but still, has to apply correct masking.
         """
         cumsum = torch.cumsum(actions, dim=-1)
-        mask_l = (1.0 - cumsum)[..., None]
-        mask_r = (cumsum - actions)[..., None]
-        mask = mask[..., None]
-        actions = actions[..., None]
+        mask_l = (1.0 - cumsum)[..., None]          # [B, L-k, 1] [1, 1, 0, 0, 0]
+        mask_r = (cumsum - actions)[..., None]      # [B, L-k, 1] [0, 0, 1, 1, 1]
+        mask = mask[..., None]                      # [B, L-k, 1] [1, 1, 1, 1, 1]
+        actions = actions[..., None]                # [B, L-k, 1] [0, 0, 1, 0, 0]
+
         # If the row of mask matrix is zero ignore everything calculated so far and copy the corresponding left hidden
         # states from the previous layer (the assumption here is that one adds padding tokens to the right side and
         # action that uses padding token can't be sampled if the row of a mask is a nonzero vector).
         # Eventually, you will end up with the leftmost state on the top that contains a correct required value.
+
+        # TODO(siyu) how two merge given the position to merge.
         h_p = (mask_l * h_l + actions * h_p + mask_r * h_r) * mask + h_l * (1. - mask)
         c_p = (mask_l * c_l + actions * c_p + mask_r * c_r) * mask + c_l * (1. - mask)
         return h_p, c_p

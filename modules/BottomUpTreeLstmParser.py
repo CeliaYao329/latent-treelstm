@@ -27,6 +27,9 @@ class BottomUpTreeLstmParser(BinaryTreeBasedModule):
                              "exclusive values!")
         if relaxed is True and tau_weights is None:
             raise ValueError("tau_weights == None and relaxed == True are mutually exclusive values!")
+        # x [B, L, word_dim]
+        # mask: [B, L]
+        print("parser forward, x.size(): ", x.size())
         probs = []
         gumbel_noise = []
         actions = []
@@ -34,9 +37,17 @@ class BottomUpTreeLstmParser(BinaryTreeBasedModule):
         normalized_entropy = []
         log_prob = []
         h, c = self._transform_leafs(x, mask)
+        # h [B, L, hidden_dim]
+        # c [B, L, hidden_dim]
+        # this loop is the process that merges L-1 times to get one representation.
         for i in range(1, x.shape[1]):
+            # TODO not sure of the purpose of noise
+            # noise_i --> gumble noise in _make_step
             noise_i = None if noise is None else noise[i - 1]
+            # TODO not sure of the purpose of eval_actions
             ev_actions_i = None if eval_actions is None else eval_actions[i - 1]
+            print("h.size(): ", h.size())
+            print("c.size(): ", c.size())
             cat_distr, gumbel_noise_i, actions_i, h, c = self._make_step(h, c, mask[:, i:], relaxed, tau_weights,
                                                                          straight_through, noise_i, ev_actions_i)
             probs.append(cat_distr.probs)
@@ -58,10 +69,24 @@ class BottomUpTreeLstmParser(BinaryTreeBasedModule):
 
     def _make_step(self, h, c, mask, relaxed, tau_weights, straight_through, gumbel_noise, ev_actions):
         # ==== calculate the prob distribution over the merge actions and sample one ====
+        # h [B, L, hidden_dim]
+        # c [B, L, hidden_dim]
+        # mask [B, L-k]
+
         h_l, c_l = h[:, :-1], c[:, :-1]
         h_r, c_r = h[:, 1:], c[:, 1:]
+        # h_l, c_l [B, L-k, hidden_dim]
+        # h_r, c_r [B, L-k, hidden_dim]
+        # print("h_l size: ", h_l.size())
+        # print("c_l size: ", c_l.size())
         h_p, c_p = self.tree_lstm_cell(h_l, c_l, h_r, c_r)
-        score = torch.matmul(h_p, self.q)  # (N x L x d, d) -> (N x L)
+        # print("h_p size: ", h_p.size())
+        # h_p, c_p [B, L-k, hidden_dim]
+        score = torch.matmul(h_p, self.q)  # (B x L-k x hidden_dim, hidden_dim) -> [B x L-k]
+        # score [B , L-k]
+        # mask [B, L-k]
+        # print("score size: ", score.size())
+        # print("mask size: ", mask.size())
         cat_distr = Categorical(score, mask)
         if ev_actions is None:
             actions, gumbel_noise = self._sample_action(cat_distr, mask, relaxed, tau_weights, straight_through,
@@ -73,9 +98,12 @@ class BottomUpTreeLstmParser(BinaryTreeBasedModule):
         return cat_distr, gumbel_noise, actions, h_p, c_p
 
     def _sample_action(self, cat_distr, mask, relaxed, tau_weights, straight_through, gumbel_noise):
+        # mask [B, L-k]
         if self.training:
             if relaxed:
+                # TODO: what is relaxed
                 N = mask.sum(dim=-1, keepdim=True)
+                # N [B, 1]
                 tau = tau_weights[0] + tau_weights[1].exp() * torch.log(N + 1) + tau_weights[2].exp() * N
                 actions, gumbel_noise = cat_distr.rsample(temperature=tau, gumbel_noise=gumbel_noise)
                 if straight_through:
@@ -87,6 +115,7 @@ class BottomUpTreeLstmParser(BinaryTreeBasedModule):
                 actions, gumbel_noise = cat_distr.rsample(gumbel_noise=gumbel_noise)
         else:
             actions = torch.zeros_like(cat_distr.probs)
+            # get the action from the distribution in the Categorical
             actions.scatter_(-1, torch.argmax(cat_distr.probs, dim=-1, keepdim=True), 1.0)
             gumbel_noise = None
         return actions, gumbel_noise
