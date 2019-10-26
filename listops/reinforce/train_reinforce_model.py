@@ -59,6 +59,7 @@ def get_data(args):
     valid_dataset = ListOpsDataset("data/listops/interim/valid.tsv", "data/listops/processed/vocab.txt", max_len=300)
     test_dataset = ListOpsDataset("data/listops/interim/test.tsv", "data/listops/processed/vocab.txt")
 
+
     train_data_sampler = ListOpsBucketSampler(dataset=train_dataset, batch_size=args.batch_size, shuffle=True,
                                               drop_last=True)
     valid_data_sampler = ListOpsBucketSampler(dataset=valid_dataset, batch_size=args.batch_size, shuffle=False,
@@ -75,6 +76,7 @@ def get_data(args):
 
     args.vocab_size = train_dataset.vocab_size
     args.label_size = train_dataset.label_size
+
     return train_data, valid_data, test_data
 
 
@@ -192,6 +194,17 @@ def validate(valid_data, model, epoch, device, logger, summary_writer):
     return accuracy_meter.avg
 
 
+def visual(model, vis_sample):
+    label, tokens, mask = vis_sample
+    probs = model(tokens, mask, label)[-1]
+    probs_list = [torch.flatten(t).tolist() for t in probs]
+    print("visual", "="*50)
+    print(vis_sample)
+    print(probs_list)
+    from visual.app import update_visual
+    update_visual(vis_sample['sentence'], probs_list)
+
+
 def train(train_data, valid_data, model, optimizer, lr_scheduler, es, epoch, args, logger, summary_writer):
     loading_time_meter = AverageMeter()
     batch_time_meter = AverageMeter()
@@ -207,14 +220,16 @@ def train(train_data, valid_data, model, optimizer, lr_scheduler, es, epoch, arg
         # labels = labels.to(device=device, non_blocking=True)
         # tokens = tokens.to(device=device, non_blocking=True)
         # mask = mask.to(device=device, non_blocking=True)
+
         # Here mask are all 1
         # labels: [B]
         # tokens: [B, L]
         # mask: [B, L] all 1 ? why in the same batch all have the same length..
         loading_time_meter.update(time.time() - start)
         print("token size:", tokens.size())
+
         # model: ReinforceModel
-        pred_labels, ce_loss, rewards, actions, actions_log_prob, entropy, normalized_entropy = \
+        pred_labels, ce_loss, rewards, actions, actions_log_prob, entropy, normalized_entropy, _ = \
             model(tokens, mask, labels)
         entropy = entropy.mean()
         normalized_entropy = normalized_entropy.mean()
@@ -262,6 +277,18 @@ def train(train_data, valid_data, model, optimizer, lr_scheduler, es, epoch, arg
 def main(args):
     logger, summary_writer = make_path_preparations(args)
     train_data, valid_data, test_data = get_data(args)
+    from listops.data_preprocessing.load_listops_data import load_listops_sample
+    if hasattr(args, 'vis_sample'):
+        print("*" * 100)
+        vis_sample = load_listops_sample(seq=args.vis_sample, vocab_path="data/listops/processed/vocab.txt")
+        # {'sentence': '[MIN 5 [MAX 3 9 ] ]', 'tokens': [12, 5, 10, 3, 9, 14, 14], 'transitions': [0, 0, 0, 0, 0, 0, 0]}
+        import torch
+        # TODO: calculating the label of a given visual sample
+        label = torch.tensor([0], dtype=torch.long)
+        tokens = torch.tensor(vis_sample['tokens'], dtype=torch.long).unsqueeze(dim=0)
+        mask = torch.ones_like(tokens, dtype=torch.float32)
+        vis_sample = (label, tokens, mask)
+
     model = ReinforceModel(vocab_size=args.vocab_size,
                            word_dim=args.word_dim,
                            hidden_dim=args.hidden_dim,
@@ -273,47 +300,47 @@ def main(args):
                            baseline_type=args.baseline_type,
                            # var_normalization=args.var_normalization).cuda(args.gpu_id)
                            var_normalization=args.var_normalization)
+
     optimizer, lr_scheduler, es = prepare_optimisers(args, logger,
                                                      policy_parameters=model.get_policy_parameters(),
                                                      environment_parameters=model.get_environment_parameters())
+    visual(model, vis_sample)
 
     # validate(valid_data, model, 0, args.gpu_id, logger, summary_writer)
     for epoch in range(args.max_epoch):
         train(train_data, valid_data, model, optimizer, lr_scheduler, es, epoch, args, logger, summary_writer)
         if es.is_converged:
             break
-    print(best_model_path)
     checkpoint = torch.load(best_model_path)
     model.load_state_dict(checkpoint["state_dict"])
     test(test_data, model, args.gpu_id, logger)
 
-
 if __name__ == "__main__":
-    args = {"word-dim":                   128,
-            "hidden-dim":                 128,
+    args = {"word-dim": 128,
+            "hidden-dim": 128,
             "parser-leaf-transformation": "lstm_transformation",
-            "parser-trans-hidden_dim":    128,
-            "tree-leaf-transformation":   "no_transformation",
-            "tree-trans-hidden_dim":      128,
-            "baseline-type":              "self_critical",
-            "var-normalization":          "True",
-            "entropy-weight":             0.0001,
-            "clip-grad-norm":             0.5,
-            "optimizer":                  "adadelta",
-            "env-lr":                     1.0,
-            "pol-lr":                     1.0,
-            "lr-scheduler-patience":      8,
-            "l2-weight":                  0.0001,
-            "batch-size":                 4,
-            "max-epoch":                  300,
-            "es-patience":                20,
-            "es-threshold":               0.005,
+            "parser-trans-hidden_dim": 128,
+            "tree-leaf-transformation": "no_transformation",
+            "tree-trans-hidden_dim": 128,
+            "baseline-type": "self_critical",
+            "var-normalization": "True",
+            "entropy-weight": 0.0001,
+            "clip-grad-norm": 0.5,
+            "optimizer": "adadelta",
+            "env-lr": 1.0,
+            "pol-lr": 1.0,
+            "lr-scheduler-patience": 8,
+            "l2-weight": 0.0001,
+            "batch-size": 4,
+            "max-epoch": 300,
+            "es-patience": 20,
+            "es-threshold": 0.005,
             # Test
-            "gpu-id":                     -1,
-            "model-dir":                  "data/listops/reinforce/models/exp0",
-            "logs-path":                  "data/listops/reinforce/logs/exp0",
-            "tensorboard-path":           "data/listops/reinforce/tensorboard/exp0"
-    }
+            "gpu-id": -1,
+            "model-dir": "data/listops/reinforce/models/exp0",
+            "logs-path": "data/listops/reinforce/logs/exp0",
+            "tensorboard-path": "data/listops/reinforce/tensorboard/exp0"
+            }
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--word-dim", required=False, default=args["word-dim"], type=int)
@@ -321,7 +348,8 @@ if __name__ == "__main__":
     parser.add_argument("--parser-leaf-transformation", required=False, default=args["parser-leaf-transformation"],
                         choices=["no_transformation", "lstm_transformation",
                                  "bi_lstm_transformation", "conv_transformation"])
-    parser.add_argument("--parser-trans-hidden_dim", required=False, default=args["parser-trans-hidden_dim"], type=int)
+    parser.add_argument("--parser-trans-hidden_dim", required=False, default=args["parser-trans-hidden_dim"],
+                        type=int)
     parser.add_argument("--tree-leaf-transformation", required=False, default=args["tree-leaf-transformation"],
                         choices=["no_transformation", "lstm_transformation",
                                  "bi_lstm_transformation", "conv_transformation"])
@@ -335,7 +363,8 @@ if __name__ == "__main__":
     parser.add_argument("--clip-grad-norm", default=args["clip-grad-norm"], type=float,
                         help="If the value is less or equal to zero clipping is not performed.")
 
-    parser.add_argument("--optimizer", required=False, default=args["optimizer"], choices=["adam", "sgd", "adadelta"])
+    parser.add_argument("--optimizer", required=False, default=args["optimizer"],
+                        choices=["adam", "sgd", "adadelta"])
     parser.add_argument("--env-lr", required=False, default=args["env-lr"], type=float)
     parser.add_argument("--pol-lr", required=False, default=args["pol-lr"], type=float)
     parser.add_argument("--lr-scheduler-patience", required=False, default=args["lr-scheduler-patience"], type=int)

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<form method="POST">
+    <input name="text">
+    <input type="submit">
+</form>
+
+<canvas id="tree_vis" width="300" height="150" style="border:1px solid #d3d3d3;">
+    Your browser does not support the HTML5 canvas tag.
+</canvas>
+
+<script>
+    var c = document.getElementById("tree_vis");
+    var sample_str = "{{sample}}";
+    var prob_stack = {{prob_stack}};
+    var tokens = sample_str.split(" ");
+    var num_of_token = tokens.length;
+    const cell_width = 50;
+    const cell_height = 30;
+    const step_height = 20;
+    const circle_d = 10;
+    c.width = num_of_token * cell_width;
+    c.height = num_of_token * cell_height;
+
+    var ctx = c.getContext("2d");
+    ctx.textAlign = "center";
+    var nodes = [];
+    for (var i = 0; i < num_of_token; i++) {
+        ctx.fillText(tokens[i], i * cell_width + cell_width / 2, (num_of_token - 1) * cell_height + circle_d, cell_width)
+        nodes.push(i * cell_width + cell_width / 2);
+    }
+
+    for (i = 1; i <= num_of_token - 1; i++) {
+        var prob = [...prob_stack[i - 1]];
+        var merge_idx = prob.indexOf(Math.max(...prob));
+
+        for (let j = 0; j < nodes.length; j++) {
+            ctx.beginPath();
+            ctx.moveTo(nodes[j], (num_of_token-1-i) * cell_height + circle_d);
+            ctx.lineTo(nodes[j], (num_of_token-i) * cell_height);
+            ctx.stroke();
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(nodes[merge_idx], (num_of_token-1-i) * cell_height + circle_d);
+        ctx.lineTo(nodes[merge_idx+1], (num_of_token-1-i) * cell_height + circle_d);
+        ctx.stroke();
+
+        for (let j = 0; j < prob.length; j++) {
+            width = nodes[j + 1] - nodes[j];
+            height = step_height;
+            x = nodes[j];
+            y = (num_of_token-1-i) * cell_height + circle_d;
+            ctx.fillStyle = 'rgba(104, 20, 180, ' + prob[j] + ')';
+            ctx.fillRect(x, y, width, height);
+        }
+
+
+
+        ctx.beginPath();
+        ctx.arc((nodes[merge_idx] + nodes[merge_idx + 1]) / 2, y-circle_d/2, circle_d/2, 0, 2*Math.PI, true);
+        ctx.stroke();
+
+        nodes.splice(merge_idx, 2, (nodes[merge_idx] + nodes[merge_idx + 1]) / 2);
+
+        for (let j = 0; j < nodes.length ; j++) {
+            if (j == merge_idx) {
+                continue;
+            }
+            ctx.beginPath();
+            ctx.moveTo(nodes[j], (num_of_token-1-i) * cell_height);
+            ctx.lineTo(nodes[j], (num_of_token-1-i) * cell_height + circle_d);
+            ctx.stroke();
+        }
+    }
+
+</script>
+
+</body>
+</html>

@@ -46,11 +46,11 @@ class BottomUpTreeLstmParser(BinaryTreeBasedModule):
             noise_i = None if noise is None else noise[i - 1]
             # TODO not sure of the purpose of eval_actions
             ev_actions_i = None if eval_actions is None else eval_actions[i - 1]
-            print("h.size(): ", h.size())
-            print("c.size(): ", c.size())
             cat_distr, gumbel_noise_i, actions_i, h, c = self._make_step(h, c, mask[:, i:], relaxed, tau_weights,
                                                                          straight_through, noise_i, ev_actions_i)
             probs.append(cat_distr.probs)
+            print(len(probs))
+            print(probs[i-1].sum(dim = 1))
             gumbel_noise.append(gumbel_noise_i)
             actions.append(actions_i)
             entropy.append(cat_distr.entropy)

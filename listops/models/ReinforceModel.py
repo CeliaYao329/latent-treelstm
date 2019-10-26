@@ -53,24 +53,24 @@ class ReinforceModel(nn.Module):
         # x: [B, L]
         # mask: [B, L]
         # labels: [B]
-        entropy, normalized_entropy, actions, actions_log_prob, logits, rewards = self._forward(x, mask, labels)
+        probs, entropy, normalized_entropy, actions, actions_log_prob, logits, rewards = self._forward(x, mask, labels)
         ce_loss = rewards.mean()
         if self.training:
             baseline = self._get_baseline(rewards, x, mask, labels)
             rewards = self._normalize(rewards - baseline)
         pred_labels = logits.argmax(dim=1)
-        return pred_labels, ce_loss, rewards.detach(), actions, actions_log_prob, entropy, normalized_entropy
+        return pred_labels, ce_loss, rewards.detach(), actions, actions_log_prob, entropy, normalized_entropy, probs
 
     def _forward(self, x, mask, labels):
         # x: [B, L]
         # mask: [B, L]
         # labels: [B]
         # embd_parser(x): [B, L, hidden_size]
-        entropy, normalized_entropy, actions, actions_log_prob = self.parser(self.embd_parser(x), mask)[1:]
+        probs, entropy, normalized_entropy, actions, actions_log_prob = self.parser(self.embd_parser(x), mask)
         h = self.tree_lstm_rnn(self.embd_tree(x), actions, mask)
         logits = self.linear(h)
         rewards = self.criterion(input=logits, target=labels)
-        return entropy, normalized_entropy, actions, actions_log_prob, logits, rewards
+        return probs, entropy, normalized_entropy, actions, actions_log_prob, logits, rewards
 
     def _get_baseline(self, rewards, x, mask, labels):
         with torch.no_grad():

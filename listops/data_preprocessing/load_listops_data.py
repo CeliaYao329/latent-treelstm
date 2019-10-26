@@ -7,6 +7,22 @@ T_SHIFT = 0
 T_REDUCE = 1
 
 
+def load_listops_sample(seq, vocab_path=None, max_len=float("inf")):
+    sample=dict()
+    if vocab_path:
+        with open(vocab_path) as f:
+            idx_to_word = [word.strip() for word in f.readlines()]
+            word_to_idx = dict()
+            for idx, word in enumerate(idx_to_word):
+                word_to_idx[word] = idx
+    sample["sentence"] = seq
+    sample["tokens"], sample["transitions"] = convert_bracketed_sequence(seq.split(' '))
+    # TODO(siyu) checking if too long or too short
+    if vocab_path:
+        sample["tokens"] = [word_to_idx[e] for e in sample["tokens"]]
+    return sample
+
+
 def load_listops_data(data_path, vocab_path=None, max_len=float("inf")):
     if vocab_path:
         with open(vocab_path) as f:

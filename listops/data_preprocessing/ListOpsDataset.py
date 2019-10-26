@@ -33,8 +33,5 @@ class ListOpsDataset(Dataset):
             mask[idx, :len(e)] = 1
         tokens = [e + [0] * (max_len - len(e)) for e in tokens]
         tokens = torch.tensor(tokens, dtype=torch.long)
-        print("collate_fn")
-        print(tokens)
-        print(mask.sum(dim=-1, keepdim=True))
-        quit()
+
         return labels, tokens, mask
